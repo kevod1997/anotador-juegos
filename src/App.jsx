@@ -6,6 +6,7 @@ import Generala from './pages/Generala';
 import TenThousand from './pages/TenThousand';
 import Truco from './pages/Truco';
 import Rules from './pages/Rules';
+import ReloadPrompt from './components/ReloadPrompt';
 
 function App() {
     return (
@@ -19,7 +20,8 @@ function App() {
                     <Route path="rules" element={<Rules />} />
                 </Route>
             </Routes>
-        </BrowserRouter>
+            <ReloadPrompt />
+        </BrowserRouter >
     );
 }
 

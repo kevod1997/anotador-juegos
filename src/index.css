@@ -11,6 +11,11 @@
         --color-background-dark: 16 34 22;
         /* #102216 */
     }
+
+    html,
+    body {
+        overscroll-behavior-y: contain;
+    }
 }
 
 .material-symbols-outlined {
