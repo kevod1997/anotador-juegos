@@ -12,10 +12,6 @@
         /* #102216 */
     }
 
-    html,
-    body {
-        overscroll-behavior-y: contain;
-    }
 }
 
 .material-symbols-outlined {
