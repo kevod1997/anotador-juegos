@@ -8,7 +8,7 @@ export default defineConfig({
         react(),
         VitePWA({
             registerType: 'prompt',
-            includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+            includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png'],
             manifest: {
                 name: 'Generala & 10.000 Scorekeeper',
                 short_name: 'Scorekeeper',
@@ -29,8 +29,7 @@ export default defineConfig({
             },
             workbox: {
                 cleanupOutdatedCaches: true,
-                clientsClaim: true,
-                skipWaiting: true
+                clientsClaim: true
             }
         })
     ],
