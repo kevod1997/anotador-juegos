@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
 import { Delete, RotateCcw, Undo2, UserPlus } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import IconButton from '../components/IconButton';
 import Avatar from '../components/Avatar';
 import AnimatedNumber from '../components/AnimatedNumber';
 import PlayerSheet from '../components/PlayerSheet';
+import PlayerSetup from '../components/PlayerSetup';
 import BottomSheet from '../components/BottomSheet';
 import ConfirmationModal from '../components/ConfirmationModal';
 import WinnerOverlay from '../components/WinnerOverlay';
@@ -14,6 +16,7 @@ import Button from '../components/Button';
 import { STORAGE_KEYS, usePersistentState } from '../lib/storage';
 import { feedback } from '../lib/feedback';
 import { newId } from '../lib/players';
+import { useRoster } from '../lib/roster';
 import { useWakeLock } from '../lib/useWakeLock';
 import { cn } from '../lib/cn';
 
@@ -23,11 +26,7 @@ const QUICK_POINTS = [50, 100, 150, 200, 300, 500, 1000];
 const fmt = (n) => n.toLocaleString('es-AR');
 
 const initialGame = () => ({
-    players: [
-        { id: newId(), name: 'Jugador 1', score: 0 },
-        { id: newId(), name: 'Jugador 2', score: 0 },
-        { id: newId(), name: 'Jugador 3', score: 0 },
-    ],
+    players: [], // se arman en PlayerSetup
     current: 0,
     turn: [], // tiradas sumadas en el turno actual
     history: [], // fotos del estado para deshacer
@@ -81,6 +80,8 @@ export default function TenThousand() {
     useWakeLock();
     const [game, setGame] = usePersistentState(STORAGE_KEYS.tenThousand, initialGame);
     const { players, current, turn = [], history = [] } = game;
+    const roster = useRoster();
+    const navigate = useNavigate();
     const currentIndex = Math.min(current, players.length - 1);
     const currentPlayer = players[currentIndex];
     const turnScore = turn.reduce((a, b) => a + b, 0);
@@ -160,6 +161,14 @@ export default function TenThousand() {
         });
     };
 
+    const startGame = (names) =>
+        setGame({
+            players: names.map((name) => ({ id: newId(), name, score: 0 })),
+            current: 0,
+            turn: [],
+            history: [],
+        });
+
     const addPlayer = () => {
         if (players.length >= MAX_PLAYERS) return;
         const player = { id: newId(), name: `Jugador ${players.length + 1}`, score: 0 };
@@ -169,8 +178,10 @@ export default function TenThousand() {
         feedback('tap');
     };
 
-    const renamePlayer = (id, name) =>
+    const renamePlayer = (id, name) => {
         setGame((g) => ({ ...g, players: g.players.map((p) => (p.id === id ? { ...p, name } : p)) }));
+        roster.learn(name);
+    };
 
     const removePlayer = (id) =>
         setGame((g) => {
@@ -197,6 +208,24 @@ export default function TenThousand() {
     };
 
     const ranking = [...players].map((p, i) => ({ ...p, index: i })).sort((a, b) => b.score - a.score);
+
+    // Sin jugadores todavía: primero se arma la partida
+    if (players.length === 0) {
+        return (
+            <div className="flex h-[100dvh] flex-col">
+                <AppHeader title="El 10.000" subtitle="Armá la partida" />
+                <PlayerSetup
+                    open
+                    subtitle="El 10.000"
+                    max={MAX_PLAYERS}
+                    defaultCount={3}
+                    roster={roster}
+                    onConfirm={startGame}
+                    onCancel={() => navigate('/')}
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-[100dvh] flex-col">
@@ -337,6 +366,7 @@ export default function TenThousand() {
                 onSave={(name) => renamePlayer(editing.id, name)}
                 onDelete={() => removePlayer(editing.id)}
                 canDelete={players.length > 1}
+                suggestions={roster.names.filter((n) => !players.some((p) => p.name === n))}
             />
 
             <ConfirmationModal

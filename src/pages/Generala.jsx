@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
 import { Crown, RotateCcw, Trophy, UserPlus } from 'lucide-react';
 import { GENERALA_CATEGORIES } from '../consts/rules';
 import AppHeader from '../components/AppHeader';
@@ -9,6 +10,7 @@ import DiceFace from '../components/DiceFace';
 import AnimatedNumber from '../components/AnimatedNumber';
 import ScoreSelector from '../components/ScoreSelector';
 import PlayerSheet from '../components/PlayerSheet';
+import PlayerSetup from '../components/PlayerSetup';
 import ConfirmationModal from '../components/ConfirmationModal';
 import Toast from '../components/Toast';
 import WinnerOverlay from '../components/WinnerOverlay';
@@ -16,6 +18,7 @@ import Button from '../components/Button';
 import { STORAGE_KEYS, usePersistentState } from '../lib/storage';
 import { feedback } from '../lib/feedback';
 import { newId } from '../lib/players';
+import { useRoster } from '../lib/roster';
 import { useWakeLock } from '../lib/useWakeLock';
 import { cn } from '../lib/cn';
 
@@ -24,13 +27,7 @@ const isNumberCategory = (cat) => /^[1-6]$/.test(cat.id);
 const cellKey = (playerId, catId) => `${playerId}:${catId}`;
 const formatScore = (v) => (v === 'GANA' ? '¡Gana!' : v === 0 ? 'tachado' : v);
 
-const initialGame = () => ({
-    players: [
-        { id: newId(), name: 'Jugador 1' },
-        { id: newId(), name: 'Jugador 2' },
-    ],
-    scores: {},
-});
+const initialGame = () => ({ players: [], scores: {} }); // los jugadores se arman en PlayerSetup
 
 function CategoryLabel({ cat }) {
     if (isNumberCategory(cat)) {
@@ -85,6 +82,8 @@ export default function Generala() {
     useWakeLock();
     const [game, setGame] = usePersistentState(STORAGE_KEYS.generala, initialGame);
     const { players, scores } = game;
+    const roster = useRoster();
+    const navigate = useNavigate();
 
     const [cell, setCell] = useState(null); // { playerId, categoryId }
     const [cellOpen, setCellOpen] = useState(false);
@@ -153,6 +152,8 @@ export default function Generala() {
         });
     };
 
+    const startGame = (names) => setGame({ players: names.map((name) => ({ id: newId(), name })), scores: {} });
+
     const addPlayer = () => {
         if (players.length >= MAX_PLAYERS) return;
         const player = { id: newId(), name: `Jugador ${players.length + 1}` };
@@ -162,8 +163,10 @@ export default function Generala() {
         setEditingOpen(true);
     };
 
-    const renamePlayer = (id, name) =>
+    const renamePlayer = (id, name) => {
         setGame((g) => ({ ...g, players: g.players.map((p) => (p.id === id ? { ...p, name } : p)) }));
+        roster.learn(name);
+    };
 
     const removePlayer = (id) => {
         if (players.length <= 1) return; // Prevent removing last player
@@ -185,6 +188,24 @@ export default function Generala() {
     const ranking = players
         .map((p, i) => ({ ...p, index: i, total: totals[i] }))
         .sort((a, b) => b.total - a.total);
+
+    // Sin jugadores todavía: primero se arma la partida
+    if (players.length === 0) {
+        return (
+            <div className="flex h-[100dvh] flex-col">
+                <AppHeader title="La Generala" subtitle="Armá la partida" />
+                <PlayerSetup
+                    open
+                    subtitle="Generala"
+                    max={MAX_PLAYERS}
+                    defaultCount={2}
+                    roster={roster}
+                    onConfirm={startGame}
+                    onCancel={() => navigate('/')}
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-[100dvh] flex-col">
@@ -313,6 +334,7 @@ export default function Generala() {
                 onSave={(name) => renamePlayer(editing.id, name)}
                 onDelete={() => removePlayer(editing.id)}
                 canDelete={players.length > 1}
+                suggestions={roster.names.filter((n) => !players.some((p) => p.name === n))}
             />
 
             <ConfirmationModal

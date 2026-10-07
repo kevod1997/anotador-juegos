@@ -5,13 +5,14 @@ import { X } from 'lucide-react';
 import { cn } from '../lib/cn';
 
 // Hoja inferior: se abre desde abajo (alcance del pulgar) y se cierra deslizando
-export default function BottomSheet({ open, onClose, title, subtitle, icon, children, className }) {
+// `dismissible={false}` obliga a resolver la hoja con sus botones (sin cerrar por fondo, arrastre ni Esc)
+export default function BottomSheet({ open, onClose, title, subtitle, icon, children, className, dismissible = true }) {
     useEffect(() => {
-        if (!open) return;
+        if (!open || !dismissible) return;
         const onKey = (e) => e.key === 'Escape' && onClose?.();
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [open, onClose]);
+    }, [open, onClose, dismissible]);
 
     return createPortal(
         <AnimatePresence>
@@ -23,7 +24,7 @@ export default function BottomSheet({ open, onClose, title, subtitle, icon, chil
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        onClick={onClose}
+                        onClick={dismissible ? onClose : undefined}
                     />
                     <motion.div
                         role="dialog"
@@ -37,7 +38,7 @@ export default function BottomSheet({ open, onClose, title, subtitle, icon, chil
                         animate={{ y: 0 }}
                         exit={{ y: '100%' }}
                         transition={{ type: 'spring', damping: 34, stiffness: 380 }}
-                        drag="y"
+                        drag={dismissible ? 'y' : false}
                         dragConstraints={{ top: 0, bottom: 0 }}
                         dragElastic={{ top: 0, bottom: 0.7 }}
                         onDragEnd={(_, info) => {
@@ -54,13 +55,15 @@ export default function BottomSheet({ open, onClose, title, subtitle, icon, chil
                                     <h3 className="truncate text-lg font-bold leading-tight">{title}</h3>
                                     {subtitle && <p className="truncate text-sm text-white/55">{subtitle}</p>}
                                 </div>
-                                <button
-                                    onClick={onClose}
-                                    aria-label="Cerrar"
-                                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-white/70 transition active:scale-90 active:bg-white/10"
-                                >
-                                    <X size={18} />
-                                </button>
+                                {dismissible && (
+                                    <button
+                                        onClick={onClose}
+                                        aria-label="Cerrar"
+                                        className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-white/70 transition active:scale-90 active:bg-white/10"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                )}
                             </header>
                         )}
                         <div className="px-5">{children}</div>
