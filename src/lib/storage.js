@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
     truco: `${PREFIX}truco`,
     tenThousand: `${PREFIX}10000`,
     settings: `${PREFIX}settings`,
+    roster: `${PREFIX}roster`,
 };
 
 export function readStored(key, fallback = null) {
