@@ -1,230 +1,367 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { Crown, RotateCcw, Trophy, UserPlus } from 'lucide-react';
 import { GENERALA_CATEGORIES } from '../consts/rules';
+import AppHeader from '../components/AppHeader';
+import IconButton from '../components/IconButton';
+import Avatar from '../components/Avatar';
+import DiceFace from '../components/DiceFace';
+import AnimatedNumber from '../components/AnimatedNumber';
 import ScoreSelector from '../components/ScoreSelector';
+import PlayerSheet from '../components/PlayerSheet';
 import ConfirmationModal from '../components/ConfirmationModal';
+import Toast from '../components/Toast';
+import WinnerOverlay from '../components/WinnerOverlay';
+import Button from '../components/Button';
+import { STORAGE_KEYS, usePersistentState } from '../lib/storage';
+import { feedback } from '../lib/feedback';
+import { newId } from '../lib/players';
+import { useWakeLock } from '../lib/useWakeLock';
+import { cn } from '../lib/cn';
 
-export default function Generala() {
-    const [players, setPlayers] = useState(['Alex']);
-    const [scores, setScores] = useState({});
-    const [activeCell, setActiveCell] = useState(null); // { playerIndex, categoryId }
-    const [isRestartModalOpen, setIsRestartModalOpen] = useState(false);
+const MAX_PLAYERS = 10;
+const isNumberCategory = (cat) => /^[1-6]$/.test(cat.id);
+const cellKey = (playerId, catId) => `${playerId}:${catId}`;
+const formatScore = (v) => (v === 'GANA' ? '¡Gana!' : v === 0 ? 'tachado' : v);
 
-    const handleScoreSelect = (value) => {
-        if (activeCell) {
-            setScores(prev => ({
-                ...prev,
-                [`${activeCell.playerIndex}-${activeCell.categoryId}`]: value
-            }));
-            setActiveCell(null);
-        }
-    };
+const initialGame = () => ({
+    players: [
+        { id: newId(), name: 'Jugador 1' },
+        { id: newId(), name: 'Jugador 2' },
+    ],
+    scores: {},
+});
 
-    const removePlayer = (indexToRemove) => {
-        if (players.length <= 1) return; // Prevent removing last player
+function CategoryLabel({ cat }) {
+    if (isNumberCategory(cat)) {
+        return <DiceFace value={Number(cat.id)} size={24} className="text-white/85" title={cat.label} />;
+    }
+    return (
+        <div className="flex flex-col leading-none" title={cat.label}>
+            <span className="text-[12px] font-bold text-white/85">{cat.short}</span>
+            <span className="mt-1 text-[10px] font-semibold text-white/35 tabular">{cat.points}</span>
+        </div>
+    );
+}
 
-        // Remove player name
-        const newPlayers = players.filter((_, idx) => idx !== indexToRemove);
-        setPlayers(newPlayers);
-
-        // Shift scores
-        // This is tricky because keys are `index-catId`.
-        // Easier approach: Rebuild scores object.
-        const newScores = {};
-        let newPlayerIdx = 0;
-
-        // Iterate through old player indices
-        for (let oldIdx = 0; oldIdx < players.length; oldIdx++) {
-            if (oldIdx === indexToRemove) continue; // Skip removed player
-
-            // Copy scores for this player to their new index
-            GENERALA_CATEGORIES.forEach(cat => {
-                const oldKey = `${oldIdx}-${cat.id}`;
-                if (scores[oldKey] !== undefined) {
-                    newScores[`${newPlayerIdx}-${cat.id}`] = scores[oldKey];
-                }
-            });
-            newPlayerIdx++;
-        }
-        setScores(newScores);
-    };
-
-    const calculateTotal = (playerIndex) => {
-        let total = 0;
-        GENERALA_CATEGORIES.forEach(cat => {
-            const val = scores[`${playerIndex}-${cat.id}`];
-            if (val === 'GANA') {
-                // GANA implies win, but for total calc we might treat as huge or just display WIN
-                return 'WIN';
-            }
-            if (val !== undefined && val !== null) {
-                total += parseInt(val, 10) || 0;
-            }
-        });
-        return total;
-    };
-
-    // Check if player won instantly
-    const checkWin = (playerIndex) => {
-        const val = scores[`${playerIndex}-generala`];
-        return val === 'GANA';
-    };
-
-    // Logic to determine grid display
-    // Using native CSS Grid for sticky behavior requires consistent sizing.
-    // We will stick to the previous grid approach but with fixed widths for columns.
-    const COL_WIDTH = '110px';
-    const LABEL_COL_WIDTH = '100px';
+function ScoreCell({ value, cat, onClick, highlight }) {
+    const empty = value === undefined;
+    const crossed = value === 0;
+    const served = !empty && cat.served !== undefined && value === cat.served;
 
     return (
-        <>
-            <header className="sticky top-0 z-30 flex items-center justify-between bg-background-light/80 p-4 pb-2 backdrop-blur-sm dark:bg-background-dark/80 transition-colors">
-                <div className="flex size-12 shrink-0 items-center justify-start">
-                    <Link to="/" className="flex size-8 items-center justify-center rounded-full text-black dark:text-white cursor-pointer">
-                        <span className="material-symbols-outlined">arrow_back_ios_new</span>
-                    </Link>
-                </div>
-                <h1 className="flex-1 text-center text-lg font-bold leading-tight tracking-[-0.015em] text-black dark:text-white">La Generala</h1>
-                <div className="flex w-24 items-center justify-end gap-2">
-                    <button
-                        onClick={() => setPlayers([...players, `Jugador ${players.length + 1}`])}
-                        className="flex size-10 items-center justify-center rounded-full text-primary hover:bg-black/5 active:bg-black/10 dark:hover:bg-white/10 dark:active:bg-white/20 transition-colors"
-                        aria-label="Agregar Jugador"
-                    >
-                        <span className="material-symbols-outlined">add</span>
-                    </button>
-                    <button
-                        onClick={() => setIsRestartModalOpen(true)}
-                        className="flex size-10 items-center justify-center rounded-full text-neutral-400 hover:bg-black/5 active:bg-black/10 dark:text-neutral-400 dark:hover:bg-white/10 dark:active:bg-white/20 transition-colors"
-                        aria-label="Nueva Partida"
-                    >
-                        <span className="material-symbols-outlined">refresh</span>
-                    </button>
-                </div>
-            </header>
+        <button
+            onClick={onClick}
+            className={cn(
+                'relative flex h-full w-full items-center justify-center rounded-xl text-[17px] font-bold tabular transition-colors active:bg-white/10',
+                empty && 'text-white/15',
+                crossed && 'bg-red-500/10 text-danger/80',
+                !empty && !crossed && 'bg-primary/10 text-primary',
+                value === 'GANA' && 'bg-gold/15 text-gold',
+                highlight && empty && 'bg-white/[0.03]'
+            )}
+            aria-label={`${cat.label}: ${empty ? 'vacío' : formatScore(value)}`}
+        >
+            <AnimatePresence mode="popLayout" initial={false}>
+                <motion.span
+                    key={String(value)}
+                    initial={{ scale: 0.4, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.4, opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 26 }}
+                    className="flex items-center"
+                >
+                    {empty ? '·' : crossed ? '✕' : value === 'GANA' ? <Trophy size={18} /> : value}
+                </motion.span>
+            </AnimatePresence>
+            {served && value !== 'GANA' && (
+                <span className="absolute right-1 top-1 text-[8px] font-extrabold uppercase text-primary/60">s</span>
+            )}
+        </button>
+    );
+}
 
-            <main className="flex-grow overflow-hidden flex flex-col">
-                {/* The main container handles the overall layout */}
-                <div className="w-full overflow-auto flex-1 relative">
+export default function Generala() {
+    useWakeLock();
+    const [game, setGame] = usePersistentState(STORAGE_KEYS.generala, initialGame);
+    const { players, scores } = game;
 
-                    {/* Grid Container */}
-                    <div
-                        className="grid"
-                        style={{
-                            gridTemplateColumns: `${LABEL_COL_WIDTH} repeat(${players.length}, ${COL_WIDTH})`,
-                            minWidth: 'fit-content' // Ensure it expands
-                        }}
-                    >
-                        {/* 1. Header Row (Player Names) */}
+    const [cell, setCell] = useState(null); // { playerId, categoryId }
+    const [cellOpen, setCellOpen] = useState(false);
+    const [editing, setEditing] = useState(null); // { id, name, index, isNew }
+    const [editingOpen, setEditingOpen] = useState(false);
+    const [isRestartModalOpen, setIsRestartModalOpen] = useState(false);
+    const [toast, setToast] = useState(null);
+    const [dismissedResult, setDismissedResult] = useState(null);
 
-                        {/* Corner Cell */}
-                        <div className="sticky left-0 top-0 z-30 flex items-center border-b border-white/10 bg-background-light p-4 dark:bg-background-dark outline outline-1 outline-white/5 shadow-[4px_0_12px_rgba(0,0,0,0.2)]">
-                            <p className="text-sm font-semibold text-neutral-500 dark:text-neutral-400">Categoría</p>
-                        </div>
+    const dismissToast = useCallback(() => setToast(null), []);
 
-                        {/* Player Headers */}
-                        {players.map((player, idx) => (
-                            <div key={`header-${idx}`} className="sticky top-0 z-10 flex flex-col gap-1 border-b border-white/10 bg-background-light p-2 dark:bg-background-dark outline outline-1 outline-white/5">
-                                <div className="flex justify-between items-center w-full">
-                                    <span className="text-xs text-neutral-400">Jugador {idx + 1}</span>
-                                    <button
-                                        onClick={() => {
-                                            if (window.confirm(`¿Eliminar a ${player}?`)) removePlayer(idx);
-                                        }}
-                                        className="text-red-500 hover:bg-red-500/10 rounded-full p-1"
-                                        disabled={players.length <= 1}
+    const totals = useMemo(
+        () =>
+            players.map((p) =>
+                GENERALA_CATEGORIES.reduce((sum, cat) => {
+                    const v = scores[cellKey(p.id, cat.id)];
+                    return typeof v === 'number' ? sum + v : sum;
+                }, 0)
+            ),
+        [players, scores]
+    );
+
+    const filled = Object.keys(scores).length;
+    const totalCells = players.length * GENERALA_CATEGORIES.length;
+    const bestTotal = Math.max(...totals);
+    const servedWinner = players.find((p) => scores[cellKey(p.id, 'generala')] === 'GANA');
+
+    // Resultado: Generala servida gana en el acto; si no, al completar la planilla gana el de más puntos
+    const result = useMemo(() => {
+        if (servedWinner) return { key: `gana-${servedWinner.id}`, served: true, winners: [servedWinner] };
+        if (filled > 0 && filled === totalCells) {
+            const winners = players.filter((_, i) => totals[i] === bestTotal);
+            return { key: `fin-${filled}-${bestTotal}`, served: false, winners };
+        }
+        return null;
+    }, [servedWinner, filled, totalCells, players, totals, bestTotal]);
+
+    const setScore = (playerId, categoryId, value) => {
+        setGame((g) => {
+            const next = { ...g.scores };
+            if (value === undefined) delete next[cellKey(playerId, categoryId)];
+            else next[cellKey(playerId, categoryId)] = value;
+            return { ...g, scores: next };
+        });
+    };
+
+    const applyScore = (value) => {
+        if (!cell) return;
+        const { playerId, categoryId } = cell;
+        const previous = scores[cellKey(playerId, categoryId)];
+        const player = players.find((p) => p.id === playerId);
+        const cat = GENERALA_CATEGORIES.find((c) => c.id === categoryId);
+
+        setScore(playerId, categoryId, value);
+        setCellOpen(false);
+        feedback(value === 0 ? 'bust' : value === undefined ? 'undo' : 'score');
+
+        const action = value === undefined ? 'borró' : value === 0 ? 'tachó' : `anotó ${value === 'GANA' ? 'Generala servida' : value}`;
+        setToast({
+            id: Date.now(),
+            message: `${player.name} ${action} en ${isNumberCategory(cat) ? `los ${cat.label}` : cat.label}`,
+            onUndo: () => {
+                setScore(playerId, categoryId, previous);
+                feedback('undo');
+            },
+        });
+    };
+
+    const addPlayer = () => {
+        if (players.length >= MAX_PLAYERS) return;
+        const player = { id: newId(), name: `Jugador ${players.length + 1}` };
+        setGame((g) => ({ ...g, players: [...g.players, player] }));
+        feedback('tap');
+        setEditing({ ...player, index: players.length, isNew: true });
+        setEditingOpen(true);
+    };
+
+    const renamePlayer = (id, name) =>
+        setGame((g) => ({ ...g, players: g.players.map((p) => (p.id === id ? { ...p, name } : p)) }));
+
+    const removePlayer = (id) => {
+        if (players.length <= 1) return; // Prevent removing last player
+        setGame((g) => {
+            const nextScores = Object.fromEntries(Object.entries(g.scores).filter(([k]) => !k.startsWith(`${id}:`)));
+            return { players: g.players.filter((p) => p.id !== id), scores: nextScores };
+        });
+    };
+
+    const restart = () => {
+        setGame((g) => ({ ...g, scores: {} }));
+        setDismissedResult(null);
+        feedback('undo');
+    };
+
+    const activePlayerIndex = cell ? players.findIndex((p) => p.id === cell.playerId) : -1;
+    const activeCategory = cell ? GENERALA_CATEGORIES.find((c) => c.id === cell.categoryId) : null;
+    const showResult = !!result && dismissedResult !== result.key;
+    const ranking = players
+        .map((p, i) => ({ ...p, index: i, total: totals[i] }))
+        .sort((a, b) => b.total - a.total);
+
+    return (
+        <div className="flex h-[100dvh] flex-col">
+            <AppHeader
+                title="La Generala"
+                subtitle={`${players.length} ${players.length === 1 ? 'jugador' : 'jugadores'} · ${filled}/${totalCells} casillas`}
+                actions={
+                    <>
+                        <IconButton label="Agregar jugador" onClick={addPlayer} disabled={players.length >= MAX_PLAYERS} className="text-primary">
+                            <UserPlus size={21} />
+                        </IconButton>
+                        <IconButton label="Nueva partida" onClick={() => setIsRestartModalOpen(true)}>
+                            <RotateCcw size={20} />
+                        </IconButton>
+                    </>
+                }
+            />
+
+            <main className="min-h-0 flex-1 overflow-auto overscroll-contain no-scrollbar">
+                <div
+                    className="grid min-h-full"
+                    style={{
+                        gridTemplateColumns: `56px repeat(${players.length}, minmax(54px, 1fr))`,
+                        gridTemplateRows: `auto repeat(${GENERALA_CATEGORIES.length}, minmax(42px, 1fr)) auto`,
+                    }}
+                >
+                    {/* Esquina */}
+                    <div className="sticky left-0 top-0 z-30 border-b border-line bg-background-dark" />
+
+                    {/* Encabezado de jugadores: iniciales + nombre corto, tocar para editar */}
+                    {players.map((player, idx) => (
+                        <button
+                            key={player.id}
+                            onClick={() => {
+                                setEditing({ ...player, index: idx, isNew: false });
+                                setEditingOpen(true);
+                            }}
+                            className="sticky top-0 z-20 flex min-w-0 flex-col items-center gap-1 border-b border-line bg-background-dark px-1 pb-2 pt-2.5 transition-colors active:bg-white/5"
+                        >
+                            <span className="relative">
+                                <Avatar name={player.name} index={idx} size={32} />
+                                {totals[idx] === bestTotal && bestTotal > 0 && players.length > 1 && (
+                                    <motion.span
+                                        initial={{ scale: 0, y: 4 }}
+                                        animate={{ scale: 1, y: 0 }}
+                                        className="absolute -right-1.5 -top-2 text-gold"
                                     >
-                                        <span className="material-symbols-outlined !text-sm">close</span>
-                                    </button>
-                                </div>
-                                <input
-                                    className="w-full resize-none overflow-hidden rounded-lg border-none bg-white/5 p-1 text-center text-sm font-medium text-black placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary dark:text-white dark:bg-white/5 dark:placeholder:text-neutral-400"
-                                    value={player}
-                                    onChange={(e) => {
-                                        const newPlayers = [...players];
-                                        newPlayers[idx] = e.target.value;
-                                        setPlayers(newPlayers);
-                                    }}
-                                />
-                            </div>
-                        ))}
+                                        <Crown size={14} fill="currentColor" />
+                                    </motion.span>
+                                )}
+                            </span>
+                            <span className="w-full truncate text-center text-[11px] font-semibold text-white/60">{player.name}</span>
+                        </button>
+                    ))}
 
-
-
-
-                        {/* 2. Data Rows */}
-                        {GENERALA_CATEGORIES.map((cat) => (
+                    {/* Filas de categorías */}
+                    {GENERALA_CATEGORIES.map((cat) => {
+                        const divider = cat.id === 'escalera';
+                        return (
                             <React.Fragment key={cat.id}>
-                                {/* Label Column (Sticky Left) */}
-                                <div className="sticky left-0 z-20 flex items-center border-b border-white/10 bg-background-light p-4 dark:bg-background-dark outline outline-1 outline-white/5 shadow-[4px_0_12px_rgba(0,0,0,0.2)]">
-                                    <p className="text-sm font-medium text-neutral-600 dark:text-neutral-300">{cat.label}</p>
+                                <div
+                                    className={cn(
+                                        'sticky left-0 z-10 flex items-center border-b border-line bg-background-dark pl-4',
+                                        divider && 'border-t border-t-white/15'
+                                    )}
+                                >
+                                    <CategoryLabel cat={cat} />
                                 </div>
-
-                                {/* Player Cells */}
-                                {players.map((_, pIdx) => {
-                                    const score = scores[`${pIdx}-${cat.id}`];
-                                    return (
-                                        <div key={`${cat.id}-${pIdx}`} className="flex items-center justify-center border-b border-white/10 p-2 outline outline-1 outline-white/5">
-                                            <button
-                                                onClick={() => setActiveCell({ playerIndex: pIdx, categoryId: cat.id })}
-                                                className={`h-10 w-full rounded-lg border-none p-2 text-center text-base font-bold transition-colors ${score === undefined
-                                                    ? 'bg-transparent text-neutral-500 hover:bg-white/5'
-                                                    : score === 0
-                                                        ? 'bg-red-500/10 text-red-400'
-                                                        : 'bg-primary/10 text-primary'
-                                                    }`}
-                                            >
-                                                {score === undefined ? '-' : (score === 0 ? 'X' : score)}
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-
-
+                                {players.map((player) => (
+                                    <div
+                                        key={player.id}
+                                        className={cn('border-b border-l border-line p-1', divider && 'border-t border-t-white/15')}
+                                    >
+                                        <ScoreCell
+                                            value={scores[cellKey(player.id, cat.id)]}
+                                            cat={cat}
+                                            highlight={cell?.playerId === player.id && cellOpen}
+                                            onClick={() => {
+                                                setCell({ playerId: player.id, categoryId: cat.id });
+                                                setCellOpen(true);
+                                                feedback('tap');
+                                            }}
+                                        />
+                                    </div>
+                                ))}
                             </React.Fragment>
-                        ))}
+                        );
+                    })}
 
-
-                        {/* 3. Total Row */}
-                        <div className="sticky left-0 bottom-0 z-30 flex items-center bg-background-light p-4 dark:bg-background-dark border-t-2 border-primary/20 outline outline-1 outline-white/5 shadow-[4px_-4px_12px_rgba(0,0,0,0.3)]">
-                            <p className="text-base font-bold text-black dark:text-white">Total</p>
-                        </div>
-
-                        {players.map((_, pIdx) => {
-                            const total = calculateTotal(pIdx);
-                            const isWin = checkWin(pIdx);
-                            return (
-                                <div key={`total-${pIdx}`} className="sticky bottom-0 z-10 flex items-center justify-center p-4 border-t-2 border-primary/20 bg-background-light dark:bg-background-dark outline outline-1 outline-white/5 shadow-[0_-4px_12px_rgba(0,0,0,0.3)]">
-                                    <p className="text-xl font-bold text-primary">
-                                        {isWin ? '🏆' : total}
-                                    </p>
-                                </div>
-                            );
-                        })}
-
-
+                    {/* Totales fijos abajo */}
+                    <div className="sticky bottom-0 left-0 z-30 flex items-center border-t border-white/15 bg-ink pb-safe pl-4">
+                        <span className="py-3 text-[11px] font-bold uppercase tracking-wider text-white/50">Total</span>
                     </div>
+                    {players.map((player, idx) => {
+                        const leader = totals[idx] === bestTotal && bestTotal > 0;
+                        const won = servedWinner?.id === player.id;
+                        return (
+                            <div
+                                key={player.id}
+                                className="sticky bottom-0 z-20 flex items-center justify-center border-l border-t border-line border-t-white/15 bg-ink pb-safe"
+                            >
+                                <span className={cn('py-3 text-xl font-extrabold tabular', leader ? 'text-primary' : 'text-white/85', won && 'text-gold')}>
+                                    {won ? <Trophy size={22} className="inline" /> : <AnimatedNumber value={totals[idx]} />}
+                                </span>
+                            </div>
+                        );
+                    })}
                 </div>
             </main>
 
-            {/* Score Selection Modal */}
-            {activeCell && (
-                <ScoreSelector
-                    isOpen={!!activeCell}
-                    onClose={() => setActiveCell(null)}
-                    onSelect={handleScoreSelect}
-                    title={`${players[activeCell.playerIndex]} - ${GENERALA_CATEGORIES.find(c => c.id === activeCell.categoryId)?.label}`}
-                    options={GENERALA_CATEGORIES.find(c => c.id === activeCell.categoryId)?.options}
-                />
-            )}
+            <ScoreSelector
+                isOpen={cellOpen}
+                onClose={() => setCellOpen(false)}
+                onSelect={applyScore}
+                onClear={() => applyScore(undefined)}
+                category={activeCategory}
+                current={cell ? scores[cellKey(cell.playerId, cell.categoryId)] : undefined}
+                title={activePlayerIndex >= 0 ? players[activePlayerIndex].name : ''}
+                icon={activePlayerIndex >= 0 && <Avatar name={players[activePlayerIndex].name} index={activePlayerIndex} size={40} />}
+            />
+
+            <PlayerSheet
+                open={editingOpen}
+                player={editing}
+                onClose={() => setEditingOpen(false)}
+                onSave={(name) => renamePlayer(editing.id, name)}
+                onDelete={() => removePlayer(editing.id)}
+                canDelete={players.length > 1}
+            />
 
             <ConfirmationModal
                 isOpen={isRestartModalOpen}
                 onClose={() => setIsRestartModalOpen(false)}
-                onConfirm={() => setScores({})}
-                title="¿Reiniciar partida?"
-                message="Se borrarán todos los puntajes actuales. Esta acción no se puede deshacer."
+                onConfirm={restart}
+                title="¿Nueva partida?"
+                message="Se borrarán todos los puntajes actuales. Los jugadores se mantienen."
+                confirmLabel="Nueva partida"
             />
-        </>
+
+            <Toast toast={toast} onDismiss={dismissToast} bottom="calc(env(safe-area-inset-bottom) + 4.5rem)" />
+
+            <WinnerOverlay
+                open={showResult}
+                title={
+                    result?.served
+                        ? '¡Generala servida!'
+                        : result?.winners.length > 1
+                            ? '¡Empate!'
+                            : `¡Ganó ${result?.winners[0]?.name}!`
+                }
+                subtitle={
+                    result?.served
+                        ? `${result.winners[0].name} gana la partida`
+                        : result?.winners.length > 1
+                            ? `${result.winners.map((w) => w.name).join(' y ')} con ${bestTotal} puntos`
+                            : `${bestTotal} puntos`
+                }
+                actions={
+                    <>
+                        <Button onClick={restart}>Nueva partida</Button>
+                        <Button variant="ghost" onClick={() => setDismissedResult(result.key)}>Ver planilla</Button>
+                    </>
+                }
+            >
+                {!result?.served && players.length > 1 && (
+                    <ol className="space-y-1.5 text-left">
+                        {ranking.map((p, pos) => (
+                            <li key={p.id} className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2">
+                                <span className="w-4 text-sm font-bold text-white/40 tabular">{pos + 1}</span>
+                                <Avatar name={p.name} index={p.index} size={28} />
+                                <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
+                                <span className="font-extrabold text-primary tabular">{p.total}</span>
+                            </li>
+                        ))}
+                    </ol>
+                )}
+            </WinnerOverlay>
+        </div>
     );
 }

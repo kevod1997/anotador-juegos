@@ -4,13 +4,14 @@ Una aplicación web progresiva (PWA) moderna para llevar el puntaje de los juego
 
 ## Características
 
-- **Generala**: Anotador completo para hasta 20 jugadores. Incluye lógica para tachar categorías y bonos por jugada servida.
-- **10.000**: Modo carrera para sumar puntos hasta llegar a la meta.
-- **Truco**: Anotador de puntos para Truco (a 15 o 30 buenas/malas).
-- **Offline First**: Funciona sin conexión a internet una vez instalada.
-- **Instalable**: Se puede instalar como una app nativa en dispositivos móviles y de escritorio.
-- **Diseño Móvil**: Optimizada para teléfonos con prevención de gestos accidentales (pull-to-refresh).
-- **Modo Oscuro**: Soporte automático según la preferencia del sistema.
+- **Generala**: Planilla compacta pensada para el celular (iniciales, dados como íconos, nombres y totales siempre visibles). Selector de puntaje con armada/servida, tachar, borrar y deshacer. Anuncia al ganador.
+- **10.000**: Jugadores editables, botones rápidos de puntos (+50 a +1.000), plantarse/perdió con deshacer y ranking final.
+- **Truco**: Fósforos animados, malas y buenas a la vista, sumar tocando la columna del equipo, botones +2/+3/+4 y deshacer (a 15 o 30).
+- **Partidas guardadas**: Cada juego se guarda en el dispositivo; desde el inicio se puede continuar la partida en curso.
+- **Pantalla siempre activa** durante la partida, vibración (Android) y sonidos opcionales.
+- **Offline First**: Fuente, íconos e ilustraciones van incluidos en la app; funciona sin conexión una vez instalada.
+- **Instalable**: Atajos al mantener presionado el ícono y guía de instalación para iPhone.
+- **Diseño Móvil**: Tema oscuro "paño de mesa", hojas inferiores, transiciones y áreas seguras del notch.
 
 ## Tecnologías
 
@@ -18,6 +19,8 @@ Una aplicación web progresiva (PWA) moderna para llevar el puntaje de los juego
 - **Vite**: Build tool rápida.
 - **Tailwind CSS**: Estilizado utility-first.
 - **Vite PWA Plugin**: Manejo de Service Workers y manifiesto.
+- **Motion**: Animaciones, transiciones y gestos.
+- **Lucide**: Íconos SVG.
 
 ## Cómo ejecutar localmente
 
@@ -35,9 +38,9 @@ Una aplicación web progresiva (PWA) moderna para llevar el puntaje de los juego
 ## Instalación
 
 ### Android / Chrome (Escritorio)
-Si el navegador es compatible, verás un botón **"Instalar para usar Offline"** en la pantalla de inicio. Haz clic para agregar la app a tu dispositivo.
+Si el navegador es compatible, verás la tarjeta **"Instalá la app"** en la pantalla de inicio. Haz clic para agregar la app a tu dispositivo.
 
 ### iOS (iPhone/iPad)
-Safari no permite que la app muestre su propio botón de instalación. Para instalar:
+Safari no permite que la app muestre su propio botón de instalación; la tarjeta **"Instalá la app"** abre una guía paso a paso. Para instalar:
 1.  Toca el botón **Compartir** (cuadrado con flecha hacia arriba) en la barra del navegador.
 2.  Busca y selecciona la opción **"Agregar a inicio"** (Add to Home Screen).

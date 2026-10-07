@@ -6,14 +6,91 @@
     :root {
         --color-primary: 43 238 108;
         /* #2bee6c */
-        --color-background-light: 246 248 246;
-        /* #f6f8f6 */
         --color-background-dark: 16 34 22;
         /* #102216 */
+        color-scheme: dark;
     }
 
+    html {
+        background-color: #102216;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        @apply bg-background-dark font-display text-white antialiased;
+        /* Paño de mesa: luz cenital suave sobre el verde */
+        background-image:
+            radial-gradient(120% 60% at 50% -10%, rgb(43 238 108 / 0.10), transparent 60%),
+            radial-gradient(100% 80% at 50% 120%, rgb(0 0 0 / 0.45), transparent 60%);
+        background-attachment: fixed;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    button,
+    a,
+    [role="button"] {
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    /* iOS hace zoom en inputs con texto menor a 16px */
+    input,
+    select,
+    textarea {
+        font-size: max(16px, 1em);
+    }
+
+    :focus-visible {
+        outline: 2px solid rgb(43 238 108 / 0.8);
+        outline-offset: 2px;
+    }
 }
 
-.material-symbols-outlined {
-    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+@layer utilities {
+    .pt-safe {
+        padding-top: env(safe-area-inset-top);
+    }
+
+    .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .pb-safe-4 {
+        padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
+    }
+
+    .no-scrollbar {
+        scrollbar-width: none;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .tabular {
+        font-variant-numeric: tabular-nums;
+    }
+
+    .glass {
+        background-color: rgb(16 34 22 / 0.72);
+        -webkit-backdrop-filter: saturate(160%) blur(16px);
+        backdrop-filter: saturate(160%) blur(16px);
+    }
+
+    .surface-card {
+        background-image: linear-gradient(180deg, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.02));
+        border: 1px solid rgb(255 255 255 / 0.07);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }

@@ -40,6 +40,7 @@ export const GENERALA_CATEGORIES = [
     },
     {
         id: 'escalera',
+        short: 'Esc.',
         label: 'Escalera',
         points: 20,
         served: 25,
@@ -47,6 +48,7 @@ export const GENERALA_CATEGORIES = [
     },
     {
         id: 'full',
+        short: 'Full',
         label: 'Full',
         points: 30,
         served: 35,
@@ -54,13 +56,15 @@ export const GENERALA_CATEGORIES = [
     },
     {
         id: 'poker',
-        label: 'Poker',
+        short: 'Póker',
+        label: 'Póker',
         points: 40,
         served: 45,
         options: [40, 45]
     },
     {
         id: 'generala',
+        short: 'Gen.',
         label: 'Generala',
         points: 50,
         served: 'GANA',
@@ -68,7 +72,8 @@ export const GENERALA_CATEGORIES = [
     },
     {
         id: 'doble_generala',
-        label: 'Doble G.',
+        short: 'Doble',
+        label: 'Doble Generala',
         points: 100,
         options: [100] // No suele ser servida si llegaste aca
     },

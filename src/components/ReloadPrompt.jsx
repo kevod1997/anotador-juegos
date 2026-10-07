@@ -1,5 +1,7 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
+import { AnimatePresence, motion } from 'motion/react'
+import { RefreshCw, WifiOff } from 'lucide-react'
 
 function ReloadPrompt() {
     const {
@@ -20,43 +22,51 @@ function ReloadPrompt() {
         setNeedRefresh(false)
     }
 
-    if (!offlineReady && !needRefresh)
-        return null
+    // El aviso de "lista offline" es informativo: se oculta solo
+    useEffect(() => {
+        if (!offlineReady) return
+        const t = setTimeout(() => setOfflineReady(false), 3500)
+        return () => clearTimeout(t)
+    }, [offlineReady, setOfflineReady])
 
+    const visible = offlineReady || needRefresh
     const message = offlineReady
-        ? 'App lista para trabajar sin conexión (offline)'
-        : 'Nueva versión disponible, click para actualizar';
+        ? 'Lista para usar sin conexión'
+        : 'Hay una nueva versión disponible'
 
     return (
-        <div className="fixed bottom-0 right-0 p-4 m-4 z-[100]">
-            <div className="bg-background-dark text-primary border border-primary/20 rounded-lg shadow-2xl p-4 flex flex-col gap-3 max-w-[300px]">
-                <div className="flex items-start gap-3">
-                    <span className="material-symbols-outlined text-primary">
-                        {offlineReady ? 'wifi_off' : 'system_update'}
-                    </span>
-                    <span className="text-sm font-medium text-white/90">
-                        {message}
-                    </span>
-                </div>
-
-                <div className="flex gap-2 justify-end mt-1">
-                    {needRefresh && (
+        <AnimatePresence>
+            {visible && (
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex justify-center px-4"
+                    style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
+                >
+                    <div className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border border-primary/20 bg-ink/95 p-3 pl-4 shadow-sheet backdrop-blur">
+                        <span className="text-primary">
+                            {offlineReady ? <WifiOff size={20} /> : <RefreshCw size={20} />}
+                        </span>
+                        <span className="min-w-0 flex-1 text-sm font-medium text-white/90">{message}</span>
+                        {needRefresh && (
+                            <button
+                                className="h-9 rounded-xl bg-primary px-3 text-sm font-bold text-background-dark transition active:scale-95"
+                                onClick={() => updateServiceWorker(true)}
+                            >
+                                Actualizar
+                            </button>
+                        )}
                         <button
-                            className="px-3 py-1.5 bg-primary text-background-dark text-xs font-bold rounded hover:bg-opacity-90 transition-colors"
-                            onClick={() => updateServiceWorker(true)}
+                            className="h-9 rounded-xl px-3 text-sm font-medium text-white/60 transition active:scale-95 active:bg-white/10"
+                            onClick={close}
                         >
-                            ACTUALIZAR
+                            Cerrar
                         </button>
-                    )}
-                    <button
-                        className="px-3 py-1.5 text-white/70 hover:text-white text-xs font-medium transition-colors"
-                        onClick={close}
-                    >
-                        CERRAR
-                    </button>
-                </div>
-            </div>
-        </div>
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
     )
 }
 

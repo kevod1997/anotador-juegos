@@ -1,203 +1,294 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useState } from 'react';
+import { motion } from 'motion/react';
+import { Minus, Plus, RotateCcw, Undo2 } from 'lucide-react';
+import AppHeader from '../components/AppHeader';
+import IconButton from '../components/IconButton';
+import AnimatedNumber from '../components/AnimatedNumber';
+import MatchBox from '../components/MatchBox';
+import ConfirmationModal from '../components/ConfirmationModal';
+import WinnerOverlay from '../components/WinnerOverlay';
+import Toast from '../components/Toast';
+import Button from '../components/Button';
+import { STORAGE_KEYS, usePersistentState } from '../lib/storage';
+import { feedback } from '../lib/feedback';
+import { useWakeLock } from '../lib/useWakeLock';
+import { cn } from '../lib/cn';
 
-// Simple Match Icon that draws lines incrementally to form a box + diagonal
-// 1: |
-// 2: |_
-// 3: |-| (open box) - actually standard is often: | (left), top, right, right, bottom, diag
-// Let's implement the standard sequence: Left, Top, Right, Bottom, Diagonal
-const MatchGroup = ({ value }) => {
-    // Increased size from w-12 h-12 to w-20 h-20 (approx 80px)
-    return (
-        <div className="relative w-20 h-20 m-2">
-            <svg viewBox="0 0 50 50" className="w-full h-full overflow-visible">
-                {/* 1: Left Vertical */}
-                {value >= 1 && (
-                    <path d="M 10 10 L 10 40" stroke="#FDBA74" strokeWidth="5" strokeLinecap="round" />
-                )}
+const QUICK_POINTS = [2, 3, 4];
 
-                {/* 2: Top Horizontal */}
-                {value >= 2 && (
-                    <path d="M 10 10 L 40 10" stroke="#FDBA74" strokeWidth="5" strokeLinecap="round" />
-                )}
+const initialGame = () => ({
+    us: 0,
+    them: 0,
+    nameUs: 'Nosotros',
+    nameThem: 'Ellos',
+    limit: 30, // 15 or 30
+    history: [], // [{ team, delta }] para deshacer
+});
 
-                {/* 3: Right Vertical */}
-                {value >= 3 && (
-                    <path d="M 40 10 L 40 40" stroke="#FDBA74" strokeWidth="5" strokeLinecap="round" />
-                )}
-
-                {/* 4: Bottom Horizontal */}
-                {value >= 4 && (
-                    <path d="M 40 40 L 10 40" stroke="#FDBA74" strokeWidth="5" strokeLinecap="round" />
-                )}
-
-                {/* 5: Diagonal */}
-                {value >= 5 && (
-                    <path d="M 10 10 L 40 40" stroke="#FDBA74" strokeWidth="5" strokeLinecap="round" />
-                )}
-
-                {/* Heads for realism? Maybe too cluttered. Let's keep it clean lines for "drawing" style or add small dots */}
-            </svg>
-        </div>
-    )
+// Cajas de 5 fósforos: a 30 se dividen en malas (0-15) y buenas (16-30)
+function boxesFor(score, count) {
+    return Array.from({ length: count }, (_, i) => Math.max(0, Math.min(5, score - i * 5)));
 }
 
-const ScoreColumn = ({ name, score, onIncrement, onDecrement, onNameChange, isWinner, limit }) => {
-    // Calculate groups of 5
-    const groups = [];
-    const fullGroups = Math.floor(score / 5);
-    const remainder = score % 5;
+function SectionLabel({ active, children }) {
+    return (
+        <span
+            className={cn(
+                'text-[10px] font-bold uppercase tracking-[0.2em] transition-colors duration-300',
+                active ? 'text-primary' : 'text-white/25'
+            )}
+        >
+            {children}
+        </span>
+    );
+}
 
-    for (let i = 0; i < fullGroups; i++) {
-        groups.push(5);
-    }
-    if (remainder > 0) {
-        groups.push(remainder);
-    }
-    // Pad with empty space to keep layout stable if needed, or just let it grow.
-    // Fixed height might be better.
-
-    // Prepare slots for the layout to ensure the divider is always in place relative to content?
-    // Or just use a fixed absolute divider in the middle of the scroll area?
-    // "Always present" and "full width".
-    // Let's divide the scrollable area into two sections: Malas and Buenas.
-    // Malas: 0-15. Buenas: 16-30.
-
-    // We can render two lists.
-    const malasGroups = groups.slice(0, 3); // First 3 groups (5, 10, 15)
-    // Actually if score is 17: groups is [5, 5, 5, 2]. Malas gets 3. Buenas gets 1.
-
-    // If we have less than 3 groups, we just render them in Malas.
-    // If we have more, the rest go to Buenas.
-
-    const buenasGroups = groups.slice(3);
+function TeamColumn({ name, score, limit, leading, isWinner, locked, onAdd, onSubtract, onNameChange }) {
+    const split = limit === 30;
+    const inBuenas = split && score > 15;
 
     return (
-        <div className={`flex flex-1 flex-col items-center h-full relative ${isWinner ? 'bg-yellow-500/10' : ''}`}>
-            {/* Header */}
-            <div className="w-full p-4 flex flex-col items-center gap-2 border-b border-white/10 shrink-0">
+        <section className={cn('relative flex min-h-0 flex-col transition-colors duration-500', isWinner && 'bg-gold/[0.06]')}>
+            {/* Nombre y puntaje */}
+            <div className="flex shrink-0 flex-col items-center px-3 pt-3">
                 <input
                     type="text"
                     value={name}
                     onChange={(e) => onNameChange(e.target.value)}
-                    className="bg-transparent text-center text-xl font-bold text-white outline-none w-full uppercase tracking-wider placeholder-white/50"
-                    placeholder="NOMBRE"
+                    maxLength={14}
+                    aria-label="Nombre del equipo"
+                    className="w-full rounded-lg bg-transparent py-0.5 text-center text-base font-bold uppercase tracking-wider text-white/80 outline-none transition focus:bg-white/5 focus:text-white"
                 />
-                <div className="text-4xl font-bold text-primary tabular-nums">{score}</div>
+                <AnimatedNumber
+                    value={score}
+                    className={cn(
+                        'text-6xl font-extrabold leading-none tracking-tight tabular transition-colors',
+                        isWinner ? 'text-gold' : leading ? 'text-primary' : 'text-white'
+                    )}
+                />
+                <span className="mt-1 text-xs font-medium text-white/40">
+                    {isWinner ? '¡Ganaron!' : `Faltan ${limit - score}`}
+                </span>
             </div>
 
-            {/* Matches Container */}
-            <div className="flex-1 w-full overflow-y-auto flex flex-col items-center relative no-scrollbar">
-
-                {/* Malas Section - Top Half */}
-                <div className="flex flex-col items-center justify-start py-4 gap-2 w-full flex-1 border-b border-white/30">
-                    {/* Use flex-col-reverse and justify-end to stack from bottom of this section up?
-                           Actually, Malas (0-15) usually go top-down.
-                           User wants vertical stack. "de 5 en 5".
-                           Let's stick to standard top-down.
-                        */}
-                    {malasGroups.map((val, idx) => (
-                        <MatchGroup key={`m-${idx}`} value={val} />
+            {/* Tablero: tocar suma 1 punto */}
+            <motion.button
+                onClick={() => onAdd(1)}
+                disabled={locked}
+                whileTap={{ scale: 0.985, backgroundColor: 'rgba(255,255,255,0.03)' }}
+                aria-label={`Sumar un punto a ${name}`}
+                className="mx-2 my-2 flex min-h-0 flex-1 flex-col rounded-3xl py-1"
+            >
+                {split && (
+                    <div className="flex shrink-0 justify-center pt-1">
+                        <SectionLabel active={!inBuenas}>Malas</SectionLabel>
+                    </div>
+                )}
+                <div className="flex min-h-0 flex-1 flex-col">
+                    {boxesFor(score, 3).map((v, i) => (
+                        <div key={`m-${i}`} className="flex min-h-0 flex-1 items-center justify-center p-0.5">
+                            <MatchBox value={v} />
+                        </div>
                     ))}
                 </div>
+                {split && (
+                    <>
+                        <div className="mx-4 my-1 flex shrink-0 items-center gap-2">
+                            <span className="h-px flex-1 bg-white/15" />
+                            <SectionLabel active={inBuenas}>Buenas</SectionLabel>
+                            <span className="h-px flex-1 bg-white/15" />
+                        </div>
+                        <div className="flex min-h-0 flex-1 flex-col">
+                            {boxesFor(score - 15, 3).map((v, i) => (
+                                <div key={`b-${i}`} className="flex min-h-0 flex-1 items-center justify-center p-0.5">
+                                    <MatchBox value={v} />
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
+            </motion.button>
 
-                {/* Buenas Section - Bottom Half */}
-                <div className="flex flex-col items-center justify-start py-4 gap-2 w-full flex-1">
-                    {buenasGroups.map((val, idx) => (
-                        <MatchGroup key={`b-${idx}`} value={val} />
+            {/* Controles */}
+            <div className="shrink-0 space-y-2 px-3 pb-3">
+                <div className="flex gap-2">
+                    <button
+                        onClick={onSubtract}
+                        disabled={score === 0}
+                        aria-label={`Restar un punto a ${name}`}
+                        className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-white ring-1 ring-inset ring-white/10 transition active:scale-90 active:bg-white/10 disabled:opacity-30"
+                    >
+                        <Minus size={22} />
+                    </button>
+                    <button
+                        onClick={() => onAdd(1)}
+                        disabled={locked}
+                        aria-label={`Sumar un punto a ${name}`}
+                        className="flex h-12 flex-1 items-center justify-center gap-1 rounded-2xl bg-primary text-lg font-extrabold text-background-dark shadow-glow transition active:scale-95 disabled:opacity-40 disabled:shadow-none"
+                    >
+                        <Plus size={22} strokeWidth={2.75} />1
+                    </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                    {QUICK_POINTS.map((pts) => (
+                        <button
+                            key={pts}
+                            onClick={() => onAdd(pts)}
+                            disabled={locked}
+                            className="h-10 rounded-xl bg-primary/10 text-[15px] font-bold text-primary ring-1 ring-inset ring-primary/20 transition active:scale-90 active:bg-primary/20 disabled:opacity-30"
+                        >
+                            +{pts}
+                        </button>
                     ))}
                 </div>
-
             </div>
-
-            {/* Controls */}
-            <div className="w-full p-4 grid grid-cols-2 gap-4 mt-auto shrink-0 border-t border-white/10">
-                <button
-                    onClick={onDecrement}
-                    className="flex h-16 items-center justify-center rounded-xl bg-white/5 text-2xl font-bold text-white active:bg-white/10 transition-colors"
-                >
-                    <span className="material-symbols-outlined">remove</span>
-                </button>
-                <button
-                    onClick={onIncrement}
-                    className="flex h-16 items-center justify-center rounded-xl bg-primary text-2xl font-bold text-background-dark active:bg-primary/90 transition-colors"
-                >
-                    <span className="material-symbols-outlined">add</span>
-                </button>
-            </div>
-        </div>
+        </section>
     );
-};
+}
 
 export default function Truco() {
-    const [scoreUs, setScoreUs] = useState(0);
-    const [scoreThem, setScoreThem] = useState(0);
-    const [nameUs, setNameUs] = useState("NOSOTROS");
-    const [nameThem, setNameThem] = useState("ELLOS");
+    useWakeLock();
+    const [game, setGame] = usePersistentState(STORAGE_KEYS.truco, initialGame);
+    const { us, them, nameUs, nameThem, limit } = game;
+    const history = game.history ?? [];
 
-    // Game limit
-    const [limit, setLimit] = useState(30); // 15 or 30
+    const [isRestartModalOpen, setIsRestartModalOpen] = useState(false);
+    const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+    const [dismissedWin, setDismissedWin] = useState(false);
+    const [toast, setToast] = useState(null);
+    const dismissToast = useCallback(() => setToast(null), []);
 
-    const resetGame = () => {
-        if (window.confirm('¿Empezar partida nueva?')) {
-            setScoreUs(0);
-            setScoreThem(0);
+    const winner = us >= limit ? 'us' : them >= limit ? 'them' : null;
+
+    const handleAdd = (team, points) => {
+        if (winner) return;
+        const current = game[team];
+        const next = Math.min(current + points, limit);
+        const delta = next - current;
+        if (delta === 0) return;
+
+        setGame((g) => ({ ...g, [team]: next, history: [...(g.history ?? []), { team, delta }] }));
+        feedback('score');
+
+        const name = team === 'us' ? nameUs : nameThem;
+        if (limit === 30 && current <= 15 && next > 15 && next < limit) {
+            setToast({ id: Date.now(), message: `${name}: ¡a las buenas!` });
         }
     };
 
-    const handleIncrement = (team) => {
-        if (team === 'us' && scoreUs < limit) setScoreUs(s => s + 1);
-        if (team === 'them' && scoreThem < limit) setScoreThem(s => s + 1);
+    const handleSubtract = (team) => {
+        if (game[team] === 0) return;
+        setGame((g) => ({ ...g, [team]: g[team] - 1, history: [...(g.history ?? []), { team, delta: -1 }] }));
+        setDismissedWin(false);
+        feedback('undo');
     };
 
-    const handleDecrement = (team) => {
-        if (team === 'us' && scoreUs > 0) setScoreUs(s => s - 1);
-        if (team === 'them' && scoreThem > 0) setScoreThem(s => s - 1);
+    const undo = () => {
+        const last = history[history.length - 1];
+        if (!last) return;
+        setGame((g) => ({
+            ...g,
+            [last.team]: Math.max(0, Math.min(g.limit, g[last.team] - last.delta)),
+            history: g.history.slice(0, -1),
+        }));
+        setDismissedWin(false);
+        feedback('undo');
     };
+
+    const resetGame = () => {
+        setGame((g) => ({ ...g, us: 0, them: 0, history: [] }));
+        setDismissedWin(false);
+    };
+
+    const toggleLimit = () => {
+        setGame((g) => ({ ...g, limit: g.limit === 30 ? 15 : 30, us: 0, them: 0, history: [] }));
+        setDismissedWin(false);
+        feedback('tap');
+    };
+
+    const winnerName = winner === 'us' ? nameUs : nameThem;
 
     return (
-        <div className="flex flex-col bg-background-dark text-white h-[100dvh] overflow-hidden">
-            {/* Toolbar */}
-            <header className="flex h-16 items-center justify-between px-4 border-b border-white/5 bg-background-dark z-10 shrink-0">
-                <Link to="/" className="flex h-10 w-10 items-center justify-center rounded-full text-white/70 hover:bg-white/10 active:bg-white/20">
-                    <span className="material-symbols-outlined">arrow_back</span>
-                </Link>
-                <div className="flex items-center gap-2">
-                    <h1 className="text-lg font-bold">Anotador de Truco</h1>
-                    <button onClick={() => setLimit(l => l === 30 ? 15 : 30)} className="text-xs px-2 py-1 rounded bg-white/10 ml-2">
-                        A {limit}
-                    </button>
-                </div>
-                <button onClick={resetGame} className="flex h-10 w-10 items-center justify-center rounded-full text-white/70 hover:bg-white/10 active:bg-white/20">
-                    <span className="material-symbols-outlined">refresh</span>
-                </button>
-            </header>
+        <div className="flex h-[100dvh] flex-col overflow-hidden">
+            <AppHeader
+                title="Truco"
+                subtitle={limit === 30 ? 'A 30 · malas y buenas' : 'A 15 puntos'}
+                actions={
+                    <>
+                        <button
+                            onClick={() => (us + them > 0 ? setIsLimitModalOpen(true) : toggleLimit())}
+                            className="mr-1 h-8 rounded-full bg-white/[0.07] px-3 text-xs font-bold text-white/80 ring-1 ring-inset ring-white/10 transition active:scale-95"
+                            aria-label="Cambiar puntaje de la partida"
+                        >
+                            A {limit}
+                        </button>
+                        <IconButton label="Deshacer" onClick={undo} disabled={history.length === 0}>
+                            <Undo2 size={20} />
+                        </IconButton>
+                        <IconButton label="Nueva partida" onClick={() => setIsRestartModalOpen(true)}>
+                            <RotateCcw size={20} />
+                        </IconButton>
+                    </>
+                }
+            />
 
-            {/* Split Screen */}
-            <div className="flex flex-1 overflow-hidden relative">
-                {/* Vertical Divider */}
-                <div className="absolute left-1/2 top-4 bottom-24 w-px bg-white/10 -translate-x-1/2 pointer-events-none"></div>
-
-                <ScoreColumn
+            <main className="relative grid min-h-0 flex-1 grid-cols-2 pb-safe">
+                <div className="pointer-events-none absolute inset-y-6 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-white/10 to-transparent" />
+                <TeamColumn
                     name={nameUs}
-                    score={scoreUs}
-                    onIncrement={() => handleIncrement('us')}
-                    onDecrement={() => handleDecrement('us')}
-                    onNameChange={setNameUs}
-                    isWinner={scoreUs >= limit}
+                    score={us}
                     limit={limit}
+                    leading={us > them}
+                    isWinner={winner === 'us'}
+                    locked={!!winner}
+                    onAdd={(pts) => handleAdd('us', pts)}
+                    onSubtract={() => handleSubtract('us')}
+                    onNameChange={(v) => setGame((g) => ({ ...g, nameUs: v }))}
                 />
-
-                <ScoreColumn
+                <TeamColumn
                     name={nameThem}
-                    score={scoreThem}
-                    onIncrement={() => handleIncrement('them')}
-                    onDecrement={() => handleDecrement('them')}
-                    onNameChange={setNameThem}
-                    isWinner={scoreThem >= limit}
+                    score={them}
                     limit={limit}
+                    leading={them > us}
+                    isWinner={winner === 'them'}
+                    locked={!!winner}
+                    onAdd={(pts) => handleAdd('them', pts)}
+                    onSubtract={() => handleSubtract('them')}
+                    onNameChange={(v) => setGame((g) => ({ ...g, nameThem: v }))}
                 />
-            </div>
+            </main>
+
+            <Toast toast={toast} onDismiss={dismissToast} duration={2200} bottom="calc(env(safe-area-inset-bottom) + 8.5rem)" />
+
+            <ConfirmationModal
+                isOpen={isRestartModalOpen}
+                onClose={() => setIsRestartModalOpen(false)}
+                onConfirm={resetGame}
+                title="¿Empezar partida nueva?"
+                message="El tanteador vuelve a cero. Los nombres se mantienen."
+                confirmLabel="Nueva partida"
+            />
+
+            <ConfirmationModal
+                isOpen={isLimitModalOpen}
+                onClose={() => setIsLimitModalOpen(false)}
+                onConfirm={toggleLimit}
+                title={`¿Jugar a ${limit === 30 ? 15 : 30}?`}
+                message="Cambiar el puntaje reinicia el tanteador actual."
+                confirmLabel={`Jugar a ${limit === 30 ? 15 : 30}`}
+            />
+
+            <WinnerOverlay
+                open={!!winner && !dismissedWin}
+                title={`¡Ganaron ${winnerName}!`}
+                subtitle={`${Math.max(us, them)} a ${Math.min(us, them)}`}
+                actions={
+                    <>
+                        <Button onClick={resetGame}>Nueva partida</Button>
+                        <Button variant="ghost" onClick={() => setDismissedWin(true)}>Ver tanteador</Button>
+                    </>
+                }
+            />
         </div>
     );
 }
