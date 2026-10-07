@@ -6,6 +6,7 @@ import InstallPWA from '../components/InstallPWA';
 import IconButton from '../components/IconButton';
 import GeneralaArt from '../components/art/GeneralaArt';
 import TenThousandArt from '../components/art/TenThousandArt';
+import CariocaArt from '../components/art/CariocaArt';
 import { gameSummaries } from '../lib/summaries';
 import { feedback, setSoundEnabled, useSettings } from '../lib/feedback';
 
@@ -37,6 +38,13 @@ const GAMES = [
         title: 'El 10.000',
         description: 'Carrera por llegar a los 10.000 puntos.',
         art: <TenThousandArt className="absolute inset-0 h-full w-full" />,
+    },
+    {
+        key: 'carioca',
+        to: '/carioca',
+        title: 'Carioca',
+        description: 'Siete manos: gana el que suma menos.',
+        art: <CariocaArt className="absolute inset-0 h-full w-full" />,
     },
 ];
 

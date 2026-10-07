@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
     generala: `${PREFIX}generala`,
     truco: `${PREFIX}truco`,
     tenThousand: `${PREFIX}10000`,
+    carioca: `${PREFIX}carioca`,
     settings: `${PREFIX}settings`,
     roster: `${PREFIX}roster`,
 };

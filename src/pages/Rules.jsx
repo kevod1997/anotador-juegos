@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
+import { CARIOCA_HANDS, cardsForHand } from '../consts/carioca';
 import { cn } from '../lib/cn';
 
 const generalaRules = [
@@ -121,10 +122,51 @@ const tenThousandRules = [
     }
 ];
 
+const cariocaRules = [
+    {
+        title: 'Objetivo',
+        content: 'Terminar las 7 manos sumando la menor cantidad de puntos. Gana el que tenga el total más bajo.'
+    },
+    {
+        title: 'Las 7 manos',
+        content: (
+            <ol className="list-decimal space-y-1 pl-5">
+                {CARIOCA_HANDS.map((hand, i) => (
+                    <li key={hand.label}>
+                        <strong>{hand.label}</strong> · {cardsForHand(i + 1)} cartas
+                    </li>
+                ))}
+            </ol>
+        )
+    },
+    {
+        title: 'Repartida',
+        content: (
+            <ul className="list-disc space-y-1 pl-5">
+                <li>Al empezar se elige quién reparte la primera mano.</li>
+                <li>En cada mano reparte el siguiente de la ronda.</li>
+                <li>Se reparten <strong>6 cartas más el número de mano</strong>: 7 en la primera y 13 en la última.</li>
+            </ul>
+        )
+    },
+    {
+        title: 'En el anotador',
+        content: (
+            <ul className="list-disc space-y-1 pl-5">
+                <li>Al terminar cada mano, tocá <strong>Anotar</strong> y cargá los puntos de cada jugador con el teclado.</li>
+                <li>Tocá una mano ya anotada para corregirla; la última también se puede borrar.</li>
+                <li>Con el botón de orden podés acomodar la ronda de repartida o cambiar quién reparte, aunque la partida ya haya empezado.</li>
+                <li>La corona marca al que va ganando (el que suma menos).</li>
+            </ul>
+        )
+    }
+];
+
 const TABS = [
     { id: 'generala', label: 'Generala', rules: generalaRules },
     { id: 'truco', label: 'Truco', rules: trucoRules },
     { id: '10000', label: '10.000', rules: tenThousandRules },
+    { id: 'carioca', label: 'Carioca', rules: cariocaRules },
 ];
 
 function Section({ title, open, onToggle, children }) {
