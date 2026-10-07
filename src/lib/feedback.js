@@ -74,6 +74,8 @@ const VIBRATIONS = {
 };
 
 export function feedback(kind) {
+    // Sin interacción previa el navegador bloquea audio y vibración (ej: ganador al recargar)
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
     try {
         if (settings.sound) SOUNDS[kind]?.();
         if (navigator.vibrate) navigator.vibrate(VIBRATIONS[kind] ?? 8);
