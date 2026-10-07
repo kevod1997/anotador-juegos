@@ -8,6 +8,8 @@ import { feedback } from '../lib/feedback';
 import { cn } from '../lib/cn';
 
 const MAX_DIGITS = 3;
+// Únicas restas permitidas (bajar cartas de golpe)
+const NEGATIVES = ['-5', '-10'];
 
 function Key({ label, onClick, className, children }) {
     return (
@@ -50,15 +52,21 @@ export default function HandSheet({ open, title, subtitle, players, initial, opt
         if (!activeId) return;
         setValues((v) => {
             const current = v[activeId] ?? '';
-            const next = current === '0' ? digit : current + digit;
+            const next = current === '0' || current.startsWith('-') ? digit : current + digit;
             return next.length > MAX_DIGITS ? v : { ...v, [activeId]: next };
         });
         feedback('tap');
     };
 
+    const setNegative = (value) => {
+        if (!activeId) return;
+        setValues((v) => ({ ...v, [activeId]: v[activeId] === value ? '' : value }));
+        feedback('tap');
+    };
+
     const erase = () => {
         if (!activeId) return;
-        setValues((v) => ({ ...v, [activeId]: (v[activeId] ?? '').slice(0, -1) }));
+        setValues((v) => ({ ...v, [activeId]: (v[activeId] ?? '').startsWith('-') ? '' : (v[activeId] ?? '').slice(0, -1) }));
         feedback('tap');
     };
 
@@ -111,6 +119,19 @@ export default function HandSheet({ open, title, subtitle, players, initial, opt
                         </button>
                     );
                 })}
+            </div>
+
+            <div className="mb-2 grid grid-cols-2 gap-2">
+                {NEGATIVES.map((n) => (
+                    <Key
+                        key={n}
+                        label={`Restar ${n.slice(1)}`}
+                        onClick={() => setNegative(n)}
+                        className={cn('h-11 text-xl text-red-300', values[activeId] === n && 'bg-red-500/25 ring-red-400/50')}
+                    >
+                        −{n.slice(1)}
+                    </Key>
+                ))}
             </div>
 
             <div className="mb-4 grid grid-cols-3 gap-2">
