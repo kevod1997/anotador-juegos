@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { RefreshCw, WifiOff } from 'lucide-react'
@@ -22,6 +22,13 @@ function ReloadPrompt() {
         setNeedRefresh(false)
     }
 
+    // El aviso de "lista offline" es informativo: se oculta solo
+    useEffect(() => {
+        if (!offlineReady) return
+        const t = setTimeout(() => setOfflineReady(false), 3500)
+        return () => clearTimeout(t)
+    }, [offlineReady, setOfflineReady])
+
     const visible = offlineReady || needRefresh
     const message = offlineReady
         ? 'Lista para usar sin conexión'
@@ -34,10 +41,10 @@ function ReloadPrompt() {
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    className="fixed inset-x-0 top-0 z-[100] flex justify-center px-4"
+                    className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex justify-center px-4"
                     style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
                 >
-                    <div className="flex w-full max-w-sm items-center gap-3 rounded-2xl border border-primary/20 bg-ink/95 p-3 pl-4 shadow-sheet backdrop-blur">
+                    <div className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border border-primary/20 bg-ink/95 p-3 pl-4 shadow-sheet backdrop-blur">
                         <span className="text-primary">
                             {offlineReady ? <WifiOff size={20} /> : <RefreshCw size={20} />}
                         </span>

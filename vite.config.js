@@ -62,6 +62,8 @@ export default defineConfig({
             },
             workbox: {
                 globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,woff2}'],
+                // icon.png es solo la fuente para generar los íconos
+                globIgnores: ['icon.png'],
                 cleanupOutdatedCaches: true,
                 clientsClaim: true
             }
