@@ -22,7 +22,7 @@ const StepButton = ({ label, disabled, onClick, children }) => (
 );
 
 // Hoja para armar la partida: cantidad de jugadores y sus nombres.
-// Arranca con la última formación recordada y ofrece los demás nombres guardados como atajos.
+// Arranca sin nombres y ofrece los demás nombres guardados como atajos.
 export default function PlayerSetup({ open, subtitle, min = 1, max, defaultCount = 2, roster, onConfirm, onCancel }) {
     const [slots, setSlots] = useState([]); // [{ id, name }]
     const inputs = useRef({});
@@ -31,16 +31,13 @@ export default function PlayerSetup({ open, subtitle, min = 1, max, defaultCount
     // Se arma una sola vez por apertura con lo que haya guardado en ese momento
     useEffect(() => {
         if (!open) return;
-        const count = Math.min(max, Math.max(defaultCount, roster.lineup.length));
-        const initial = Array.from({ length: count }, (_, i) => ({ id: newId(), name: roster.lineup[i] ?? '' }));
+        // Siempre arranca vacío: los nombres guardados se eligen desde los atajos
+        const count = Math.min(max, Math.max(min, defaultCount));
+        const initial = Array.from({ length: count }, () => ({ id: newId(), name: '' }));
         setSlots(initial);
 
-        // Si no hay nombres que repetir, ir directo a escribir el primero
-        const firstEmpty = initial.find((s) => !s.name);
-        if (!initial[0].name && firstEmpty) {
-            const t = setTimeout(() => inputs.current[firstEmpty.id]?.focus(), 300);
-            return () => clearTimeout(t);
-        }
+        const t = setTimeout(() => inputs.current[initial[0].id]?.focus(), 300);
+        return () => clearTimeout(t);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
