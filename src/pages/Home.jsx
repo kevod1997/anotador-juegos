@@ -130,12 +130,10 @@ export default function Home() {
                 initial="hidden"
                 animate="show"
             >
+                <InstallPWA />
                 {GAMES.map((game) => (
                     <GameCard key={game.key} game={game} summary={summaries[game.key]} />
                 ))}
-                <motion.div variants={itemVariants} className="mt-2">
-                    <InstallPWA />
-                </motion.div>
             </motion.main>
         </>
     );
