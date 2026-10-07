@@ -34,10 +34,7 @@ export default function PlayerSetup({ open, subtitle, min = 1, max, defaultCount
         // Siempre arranca vacío: los nombres guardados se eligen desde los atajos
         const count = Math.min(max, Math.max(min, defaultCount));
         const initial = Array.from({ length: count }, () => ({ id: newId(), name: '' }));
-        setSlots(initial);
-
-        const t = setTimeout(() => inputs.current[initial[0].id]?.focus(), 300);
-        return () => clearTimeout(t);
+        setSlots(initial); // sin autofocus: el teclado solo aparece si tocás un campo
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
