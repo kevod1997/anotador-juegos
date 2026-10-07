@@ -1,151 +1,379 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { Delete, RotateCcw, Undo2, UserPlus } from 'lucide-react';
+import AppHeader from '../components/AppHeader';
+import IconButton from '../components/IconButton';
+import Avatar from '../components/Avatar';
+import AnimatedNumber from '../components/AnimatedNumber';
+import PlayerSheet from '../components/PlayerSheet';
+import BottomSheet from '../components/BottomSheet';
+import ConfirmationModal from '../components/ConfirmationModal';
+import WinnerOverlay from '../components/WinnerOverlay';
+import Toast from '../components/Toast';
+import Button from '../components/Button';
+import { STORAGE_KEYS, usePersistentState } from '../lib/storage';
+import { feedback } from '../lib/feedback';
+import { newId } from '../lib/players';
+import { useWakeLock } from '../lib/useWakeLock';
+import { cn } from '../lib/cn';
+
+const GOAL = 10000;
+const MAX_PLAYERS = 8;
+const QUICK_POINTS = [50, 100, 150, 200, 300, 500, 1000];
+const fmt = (n) => n.toLocaleString('es-AR');
+
+const initialGame = () => ({
+    players: [
+        { id: newId(), name: 'Jugador 1', score: 0 },
+        { id: newId(), name: 'Jugador 2', score: 0 },
+        { id: newId(), name: 'Jugador 3', score: 0 },
+    ],
+    current: 0,
+    turn: [], // tiradas sumadas en el turno actual
+    history: [], // fotos del estado para deshacer
+});
+
+function PlayerRow({ player, index, active, onEdit, rowRef }) {
+    const progress = Math.min(player.score / GOAL, 1);
+    const won = player.score >= GOAL;
+    return (
+        <motion.li
+            ref={rowRef}
+            layout
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, x: -40 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 34 }}
+            className={cn(
+                'relative overflow-hidden rounded-2xl px-3.5 py-3 ring-1 ring-inset transition-colors duration-300',
+                active ? 'bg-primary/[0.07] ring-primary/60' : 'surface-card ring-transparent',
+                won && 'bg-gold/[0.08] ring-gold/50'
+            )}
+        >
+            <div className="flex items-center gap-3">
+                <button onClick={onEdit} className="flex min-w-0 flex-1 items-center gap-3 text-left" aria-label={`Editar ${player.name}`}>
+                    <Avatar name={player.name} index={index} size={36} />
+                    <span className="min-w-0">
+                        <span className={cn('block truncate font-bold', active ? 'text-white' : 'text-white/80')}>{player.name}</span>
+                        <span className="block text-xs font-medium text-white/40">
+                            {won ? '¡Llegó a la meta!' : active ? 'Tirando ahora' : `Faltan ${fmt(GOAL - player.score)}`}
+                        </span>
+                    </span>
+                </button>
+                <AnimatedNumber
+                    value={player.score}
+                    className={cn('text-2xl font-extrabold tabular', won ? 'text-gold' : active ? 'text-primary' : 'text-white')}
+                />
+            </div>
+            <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+                <motion.div
+                    className={cn('h-full rounded-full', won ? 'bg-gold' : 'bg-primary')}
+                    initial={false}
+                    animate={{ width: `${progress * 100}%` }}
+                    transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+                />
+            </div>
+        </motion.li>
+    );
+}
 
 export default function TenThousand() {
-    const [players, setPlayers] = useState([
-        { name: 'Jugador 1', score: 0 },
-        { name: 'Jugador 2', score: 0 },
-        { name: 'Jugador 3', score: 0 }
-    ]);
-    const [currentPlayer, setCurrentPlayer] = useState(0);
-    const [turnScore, setTurnScore] = useState(0);
-    const [rollInput, setRollInput] = useState('');
+    useWakeLock();
+    const [game, setGame] = usePersistentState(STORAGE_KEYS.tenThousand, initialGame);
+    const { players, current, turn = [], history = [] } = game;
+    const currentIndex = Math.min(current, players.length - 1);
+    const currentPlayer = players[currentIndex];
+    const turnScore = turn.reduce((a, b) => a + b, 0);
+    const winner = players.find((p) => p.score >= GOAL);
 
-    const handleAddRoll = () => {
-        const points = parseInt(rollInput, 10);
-        if (!isNaN(points)) {
-            setTurnScore(prev => prev + points);
-            setRollInput('');
-        }
+    const [editing, setEditing] = useState(null);
+    const [editingOpen, setEditingOpen] = useState(false);
+    const [customOpen, setCustomOpen] = useState(false);
+    const [customValue, setCustomValue] = useState('');
+    const [isRestartModalOpen, setIsRestartModalOpen] = useState(false);
+    const [dismissedWin, setDismissedWin] = useState(false);
+    const [toast, setToast] = useState(null);
+    const dismissToast = useCallback(() => setToast(null), []);
+    const rowRefs = useRef({});
+
+    // Mantener a la vista al jugador que tiene el turno
+    useEffect(() => {
+        rowRefs.current[currentPlayer?.id]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, [currentPlayer?.id]);
+
+    const snapshot = (g) => ({ players: g.players, current: g.current, turn: g.turn });
+    const pushHistory = (g) => [...(g.history ?? []), snapshot(g)].slice(-30);
+
+    const addRoll = (points) => {
+        if (!points || winner) return;
+        setGame((g) => ({ ...g, turn: [...(g.turn ?? []), points] }));
+        feedback('tap');
+    };
+
+    const removeLastRoll = () => {
+        setGame((g) => ({ ...g, turn: (g.turn ?? []).slice(0, -1) }));
+        feedback('undo');
+    };
+
+    const restoreLast = () => {
+        setGame((g) => {
+            const last = g.history?.[g.history.length - 1];
+            if (!last) return g;
+            return { ...g, ...last, history: g.history.slice(0, -1) };
+        });
+        setDismissedWin(false);
+        feedback('undo');
     };
 
     const handleBank = () => { // Plantarse
-        const newPlayers = [...players];
-        const newScore = newPlayers[currentPlayer].score + turnScore;
-        newPlayers[currentPlayer].score = Math.min(newScore, 10000); // El objetivo es llegar a 10.000
-
-        setPlayers(newPlayers);
-        setTurnScore(0);
-        setRollInput('');
-
-        if (newScore >= 10000) {
-            alert(`¡${players[currentPlayer].name} Ganó!`);
-        } else {
-            nextTurn();
+        if (turnScore === 0 || winner) return;
+        const name = currentPlayer.name;
+        const reachesGoal = currentPlayer.score + turnScore >= GOAL;
+        setGame((g) => ({
+            ...g,
+            players: g.players.map((p, i) => (i === currentIndex ? { ...p, score: p.score + turnScore } : p)),
+            current: reachesGoal ? currentIndex : (currentIndex + 1) % g.players.length,
+            turn: [],
+            history: pushHistory(g),
+        }));
+        if (!reachesGoal) {
+            feedback('score');
+            setToast({ id: Date.now(), message: `${name} sumó ${fmt(turnScore)}`, onUndo: restoreLast });
         }
     };
 
     const handleBust = () => {
-        setTurnScore(0);
-        setRollInput('');
-        nextTurn();
+        if (winner) return;
+        const name = currentPlayer.name;
+        const lost = turnScore;
+        setGame((g) => ({
+            ...g,
+            current: (currentIndex + 1) % g.players.length,
+            turn: [],
+            history: pushHistory(g),
+        }));
+        feedback('bust');
+        setToast({
+            id: Date.now(),
+            message: lost > 0 ? `${name} perdió ${fmt(lost)} puntos` : `${name} no sumó`,
+            onUndo: restoreLast,
+        });
     };
 
-    const nextTurn = () => {
-        setCurrentPlayer((prev) => (prev + 1) % players.length);
+    const addPlayer = () => {
+        if (players.length >= MAX_PLAYERS) return;
+        const player = { id: newId(), name: `Jugador ${players.length + 1}`, score: 0 };
+        setGame((g) => ({ ...g, players: [...g.players, player] }));
+        setEditing({ ...player, index: players.length, isNew: true });
+        setEditingOpen(true);
+        feedback('tap');
     };
+
+    const renamePlayer = (id, name) =>
+        setGame((g) => ({ ...g, players: g.players.map((p) => (p.id === id ? { ...p, name } : p)) }));
+
+    const removePlayer = (id) =>
+        setGame((g) => {
+            if (g.players.length <= 1) return g;
+            const idx = g.players.findIndex((p) => p.id === id);
+            const nextPlayers = g.players.filter((p) => p.id !== id);
+            let nextCurrent = g.current;
+            if (idx < g.current) nextCurrent -= 1;
+            if (nextCurrent >= nextPlayers.length) nextCurrent = 0;
+            return { ...g, players: nextPlayers, current: nextCurrent, turn: idx === g.current ? [] : g.turn, history: [] };
+        });
+
+    const restart = () => {
+        setGame((g) => ({ ...g, players: g.players.map((p) => ({ ...p, score: 0 })), current: 0, turn: [], history: [] }));
+        setDismissedWin(false);
+    };
+
+    const submitCustom = (e) => {
+        e.preventDefault();
+        const points = parseInt(customValue, 10);
+        if (!isNaN(points) && points > 0) addRoll(points);
+        setCustomValue('');
+        setCustomOpen(false);
+    };
+
+    const ranking = [...players].map((p, i) => ({ ...p, index: i })).sort((a, b) => b.score - a.score);
 
     return (
-        <div className="relative flex min-h-screen w-full flex-col text-black dark:text-white pb-80 bg-background-light dark:bg-background-dark">
-            {/* Top App Bar */}
-            <header className="sticky top-0 z-10 w-full bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-sm p-4 pb-2">
-                <div className="flex h-12 items-center justify-between">
-                    <div className="flex size-12 shrink-0 items-center justify-start">
-                        <Link to="/" className="flex size-8 items-center justify-center rounded-full text-black dark:text-white cursor-pointer">
-                            <span className="material-symbols-outlined">arrow_back_ios_new</span>
-                        </Link>
-                    </div>
-                    <h1 className="text-xl font-bold text-zinc-900 dark:text-white">El 10.000</h1>
-                    <div className="flex w-12 items-center justify-end">
-                        <button className="flex h-12 w-12 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-transparent text-zinc-900 dark:text-white">
-                            <span className="material-symbols-outlined">more_vert</span>
-                        </button>
-                    </div>
-                </div>
-            </header>
+        <div className="flex h-[100dvh] flex-col">
+            <AppHeader
+                title="El 10.000"
+                subtitle={`${players.length} jugadores · meta ${fmt(GOAL)}`}
+                actions={
+                    <>
+                        <IconButton label="Agregar jugador" onClick={addPlayer} disabled={players.length >= MAX_PLAYERS} className="text-primary">
+                            <UserPlus size={21} />
+                        </IconButton>
+                        <IconButton label="Deshacer" onClick={restoreLast} disabled={history.length === 0}>
+                            <Undo2 size={20} />
+                        </IconButton>
+                        <IconButton label="Nueva partida" onClick={() => setIsRestartModalOpen(true)}>
+                            <RotateCcw size={20} />
+                        </IconButton>
+                    </>
+                }
+            />
 
-            {/* Player Scores */}
-            <main className="flex flex-col gap-4 p-4">
-                {players.map((player, idx) => {
-                    const isActive = idx === currentPlayer;
-                    const isWinner = player.score >= 10000;
-                    return (
-                        <div
-                            key={idx}
-                            className={`flex flex-col gap-3 rounded-xl p-4 border transition-all ${isActive
-                                ? 'bg-white/10 ring-2 ring-primary shadow-lg shadow-primary/20 border-transparent'
-                                : 'bg-white/5 border-white/10 opacity-80'
-                                }`}
-                        >
-                            <div className="flex flex-col items-stretch justify-start">
-                                <div className="flex w-full grow flex-col items-stretch justify-center gap-1">
-                                    <p className={`text-lg font-bold leading-tight tracking-[-0.015em] ${isActive ? 'text-primary' : 'text-zinc-500 dark:text-zinc-400'}`}>
-                                        {player.name}
-                                    </p>
-                                    <div className="flex items-end justify-between gap-3">
-                                        <p className="text-3xl font-bold leading-normal text-black dark:text-white">{player.score}</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <div className="flex justify-end gap-6">
-                                    <p className="text-sm font-normal leading-normal text-zinc-600 dark:text-zinc-400">{player.score} / 10000</p>
-                                </div>
-                                <div className="rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
-                                    <div
-                                        className={`h-2 rounded-full ${isWinner ? 'bg-yellow-400' : 'bg-primary'} transition-all duration-500`}
-                                        style={{ width: `${Math.min((player.score / 10000) * 100, 100)}%` }}
-                                    ></div>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
+            <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 no-scrollbar">
+                <ul className="space-y-2">
+                    <AnimatePresence initial={false}>
+                        {players.map((player, idx) => (
+                            <PlayerRow
+                                key={player.id}
+                                player={player}
+                                index={idx}
+                                active={idx === currentIndex && !winner}
+                                rowRef={(el) => (rowRefs.current[player.id] = el)}
+                                onEdit={() => {
+                                    setEditing({ ...player, index: idx, isNew: false });
+                                    setEditingOpen(true);
+                                }}
+                            />
+                        ))}
+                    </AnimatePresence>
+                </ul>
             </main>
 
-            {/* Floating Action Panel */}
-            <footer className="fixed bottom-0 left-0 right-0 z-20 w-full p-4">
-                <div className="flex flex-col gap-4 rounded-xl border border-white/10 bg-white/90 dark:bg-zinc-800/90 p-6 backdrop-blur-xl shadow-2xl">
-                    <div className="flex flex-col items-center justify-center text-center">
-                        <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Turno de {players[currentPlayer].name}</p>
-                        <p className="text-base font-medium text-zinc-800 dark:text-zinc-300">Puntaje del Turno</p>
-                        <p className="text-5xl font-extrabold text-primary">{turnScore}</p>
+            {/* Panel del turno */}
+            <footer className="shrink-0 rounded-t-[28px] border-t border-white/10 bg-surface px-4 pt-4 shadow-sheet pb-safe-4">
+                <div className="mb-3 flex items-center gap-3">
+                    <Avatar name={currentPlayer.name} index={currentIndex} size={36} />
+                    <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-white/40">Turno de</p>
+                        <AnimatePresence mode="wait" initial={false}>
+                            <motion.p
+                                key={currentPlayer.id}
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -6 }}
+                                transition={{ duration: 0.15 }}
+                                className="truncate font-bold"
+                            >
+                                {currentPlayer.name}
+                            </motion.p>
+                        </AnimatePresence>
                     </div>
-
-                    {/* Roll Input Area */}
-                    <div className="flex gap-2">
-                        <input
-                            type="number"
-                            value={rollInput}
-                            onChange={(e) => setRollInput(e.target.value)}
-                            placeholder="Puntos..."
-                            className="flex-1 rounded-xl border-none bg-zinc-100 dark:bg-black/20 p-3 text-center text-lg font-bold text-black dark:text-white placeholder:text-zinc-400 focus:ring-2 focus:ring-primary"
-                        />
-                        <button
-                            onClick={handleAddRoll}
-                            disabled={!rollInput}
-                            className="flex items-center justify-center rounded-xl bg-zinc-200 dark:bg-zinc-700 px-4 text-black dark:text-white disabled:opacity-50"
-                        >
-                            <span className="material-symbols-outlined">add</span>
-                        </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <button
-                            onClick={handleBust}
-                            className="flex h-12 w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-red-500/50 bg-transparent text-base font-bold text-red-500 transition-colors hover:bg-red-500/10"
-                        >
-                            Perdió (0)
-                        </button>
-                        <button
-                            onClick={handleBank}
-                            className="flex h-12 w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl bg-primary text-base font-bold text-black transition-opacity hover:opacity-90"
-                        >
-                            Plantarse
-                        </button>
+                    <div className="text-right">
+                        <AnimatedNumber value={turnScore} className="text-4xl font-extrabold leading-none text-primary tabular" />
+                        <div className="mt-1 flex h-5 items-center justify-end gap-1.5">
+                            <span className="max-w-[9rem] truncate text-xs font-medium text-white/40 tabular">
+                                {turn.length > 0 ? turn.map(fmt).join(' + ') : 'Puntos del turno'}
+                            </span>
+                            {turn.length > 0 && (
+                                <button
+                                    onClick={removeLastRoll}
+                                    aria-label="Quitar última tirada"
+                                    className="flex size-6 items-center justify-center rounded-md text-white/50 transition active:scale-90 active:bg-white/10"
+                                >
+                                    <Delete size={15} />
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
+
+                <div className="mb-3 grid grid-cols-4 gap-2">
+                    {QUICK_POINTS.map((pts) => (
+                        <motion.button
+                            key={pts}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => addRoll(pts)}
+                            disabled={!!winner}
+                            className="h-10 rounded-xl bg-primary/10 text-[15px] font-bold text-primary ring-1 ring-inset ring-primary/20 transition-colors active:bg-primary/20 disabled:opacity-30 tabular"
+                        >
+                            +{fmt(pts)}
+                        </motion.button>
+                    ))}
+                    <motion.button
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => setCustomOpen(true)}
+                        disabled={!!winner}
+                        className="h-10 rounded-xl bg-white/[0.06] text-[15px] font-bold text-white/80 ring-1 ring-inset ring-white/10 disabled:opacity-30"
+                    >
+                        Otro
+                    </motion.button>
+                </div>
+
+                <div className="grid grid-cols-[1fr_1.4fr] gap-3">
+                    <Button variant="danger" onClick={handleBust} disabled={!!winner}>
+                        Perdió
+                    </Button>
+                    <Button onClick={handleBank} disabled={turnScore === 0 || !!winner}>
+                        Plantarse{turnScore > 0 && <span className="tabular">+{fmt(turnScore)}</span>}
+                    </Button>
+                </div>
             </footer>
+
+            <BottomSheet open={customOpen} onClose={() => setCustomOpen(false)} title="Otra cantidad" subtitle="Puntos de esta tirada">
+                <form onSubmit={submitCustom}>
+                    <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoFocus
+                        value={customValue}
+                        onChange={(e) => setCustomValue(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                        placeholder="Ej: 350"
+                        enterKeyHint="done"
+                        className="mb-2 h-16 w-full rounded-2xl border-0 bg-white/[0.06] px-4 text-center text-3xl font-extrabold text-white ring-1 ring-inset ring-white/10 placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-primary tabular"
+                    />
+                    <p className="mb-5 h-5 text-center text-xs text-white/40">
+                        {customValue && parseInt(customValue, 10) % 50 !== 0 ? 'Ojo: en el 10.000 los puntos van de a 50' : ' '}
+                    </p>
+                    <Button type="submit" className="w-full" disabled={!customValue}>
+                        Sumar al turno
+                    </Button>
+                </form>
+            </BottomSheet>
+
+            <PlayerSheet
+                open={editingOpen}
+                player={editing}
+                onClose={() => setEditingOpen(false)}
+                onSave={(name) => renamePlayer(editing.id, name)}
+                onDelete={() => removePlayer(editing.id)}
+                canDelete={players.length > 1}
+            />
+
+            <ConfirmationModal
+                isOpen={isRestartModalOpen}
+                onClose={() => setIsRestartModalOpen(false)}
+                onConfirm={restart}
+                title="¿Nueva partida?"
+                message="Todos los puntajes vuelven a cero. Los jugadores se mantienen."
+                confirmLabel="Nueva partida"
+            />
+
+            <Toast toast={toast} onDismiss={dismissToast} bottom="calc(env(safe-area-inset-bottom) + 15.5rem)" />
+
+            <WinnerOverlay
+                open={!!winner && !dismissedWin}
+                title={`¡Ganó ${winner?.name}!`}
+                subtitle={winner && `Llegó a ${fmt(winner.score)} puntos`}
+                actions={
+                    <>
+                        <Button onClick={restart}>Nueva partida</Button>
+                        <Button variant="ghost" onClick={() => setDismissedWin(true)}>Ver tablero</Button>
+                    </>
+                }
+            >
+                {players.length > 1 && (
+                    <ol className="space-y-1.5 text-left">
+                        {ranking.map((p, pos) => (
+                            <li key={p.id} className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2">
+                                <span className="w-4 text-sm font-bold text-white/40 tabular">{pos + 1}</span>
+                                <Avatar name={p.name} index={p.index} size={28} />
+                                <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
+                                <span className="font-extrabold text-primary tabular">{fmt(p.score)}</span>
+                            </li>
+                        ))}
+                    </ol>
+                )}
+            </WinnerOverlay>
         </div>
     );
 }
