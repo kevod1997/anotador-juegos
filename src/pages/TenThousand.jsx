@@ -195,7 +195,7 @@ export default function TenThousand() {
         });
 
     const restart = () => {
-        setGame((g) => ({ ...g, players: g.players.map((p) => ({ ...p, score: 0 })), current: 0, turn: [], history: [] }));
+        setGame(initialGame()); // vuelve al armado de jugadores
         setDismissedWin(false);
     };
 

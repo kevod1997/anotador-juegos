@@ -177,7 +177,7 @@ export default function Generala() {
     };
 
     const restart = () => {
-        setGame((g) => ({ ...g, scores: {} }));
+        setGame(initialGame()); // vuelve al armado de jugadores
         setDismissedResult(null);
         feedback('undo');
     };
