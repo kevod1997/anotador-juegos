@@ -24,5 +24,15 @@ export function gameSummaries() {
         summaries.tenThousand = `Lidera ${leader.name} · ${fmt(leader.score)}`;
     }
 
+    const carioca = readStored(STORAGE_KEYS.carioca);
+    if (carioca?.hands?.length > 0 && carioca.players?.length > 0) {
+        const total = (p) => carioca.hands.reduce((sum, h) => sum + (h.scores[p.id] ?? 0), 0);
+        const leader = [...carioca.players].sort((a, b) => total(a) - total(b))[0];
+        summaries.carioca =
+            carioca.hands.length >= 7
+                ? `Terminada · Ganó ${leader.name}`
+                : `Mano ${carioca.hands.length + 1}/7 · Lidera ${leader.name} · ${fmt(total(leader))}`;
+    }
+
     return summaries;
 }

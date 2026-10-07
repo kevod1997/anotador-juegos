@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import Generala from './pages/Generala';
 import TenThousand from './pages/TenThousand';
 import Truco from './pages/Truco';
+import Carioca from './pages/Carioca';
 import Rules from './pages/Rules';
 import ReloadPrompt from './components/ReloadPrompt';
 
@@ -17,6 +18,7 @@ function App() {
                     <Route path="generala" element={<Generala />} />
                     <Route path="10000" element={<TenThousand />} />
                     <Route path="truco" element={<Truco />} />
+                    <Route path="carioca" element={<Carioca />} />
                     <Route path="rules" element={<Rules />} />
                 </Route>
             </Routes>

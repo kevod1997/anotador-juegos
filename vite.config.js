@@ -10,9 +10,9 @@ export default defineConfig({
             registerType: 'prompt',
             includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png'],
             manifest: {
-                name: 'Anotador · Generala, Truco y 10.000',
+                name: 'Anotador · Generala, Truco, 10.000 y Carioca',
                 short_name: 'Anotador',
-                description: 'Anotador de puntos para Generala, Truco y 10.000. Funciona sin conexión.',
+                description: 'Anotador de puntos para Generala, Truco, 10.000 y Carioca. Funciona sin conexión.',
                 lang: 'es',
                 theme_color: '#102216',
                 background_color: '#102216',
@@ -56,6 +56,12 @@ export default defineConfig({
                         name: '10.000',
                         short_name: '10.000',
                         url: '/10000',
+                        icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }]
+                    },
+                    {
+                        name: 'Carioca',
+                        short_name: 'Carioca',
+                        url: '/carioca',
                         icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }]
                     }
                 ]
