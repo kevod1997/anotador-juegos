@@ -9,7 +9,7 @@ import { cn } from '../lib/cn';
 
 const MAX_DIGITS = 3;
 // Únicas restas permitidas (bajar cartas de golpe)
-const NEGATIVES = ['-5', '-10'];
+const NEGATIVES = ['-5', '-10', '-20'];
 
 function Key({ label, onClick, className, children }) {
     return (
@@ -121,7 +121,7 @@ export default function HandSheet({ open, title, subtitle, players, initial, opt
                 })}
             </div>
 
-            <div className="mb-2 grid grid-cols-2 gap-2">
+            <div className="mb-2 grid grid-cols-3 gap-2">
                 {NEGATIVES.map((n) => (
                     <Key
                         key={n}
